@@ -15,8 +15,8 @@ public class Cipher {
 	private static List<IProguarder> sPs = new ArrayList<>();
 	
 	static{
-		sPs.add(new ShiftProguarder());
-		sPs.add(new PaddingProguarder());
+//		sPs.add(new ShiftProguarder());
+//		sPs.add(new PaddingProguarder());
 	}
 	
 	private static final int BLOCK_SIZE = 255;
@@ -206,30 +206,35 @@ public class Cipher {
 		boolean result = true;
 		int l = len;
 		ByteBuffer buffer = null;
-		for(int i=ps.size()-1;i>=0;i--) {
-			IProguarder p = ps.get(i);
-			if(i == 0) {
-				if(buffer == null) {
-					result = result && p.decode(origin, offset, len, outBuffer);
-				}else {
-					result = result && p.decode(buffer.array(), 0, buffer.position(), outBuffer);
-					ByteBufferPool.recycle(buffer);
+		if(ps.size() > 0) {
+			for(int i=ps.size()-1;i>=0;i--) {
+				IProguarder p = ps.get(i);
+				if(i == 0) {
+					if(buffer == null) {
+						result = result && p.decode(origin, offset, len, outBuffer);
+					}else {
+						result = result && p.decode(buffer.array(), 0, buffer.position(), outBuffer);
+						ByteBufferPool.recycle(buffer);
+					}
+				}else {				
+					ByteBuffer next = ByteBufferPool.obtain(p.estimateDecodeLen(l));
+					if(buffer == null) {
+						result = result && p.decode(origin, offset, len, next);
+					}else {
+						result = result && p.decode(buffer.array(), 0,buffer.position(),next);
+						ByteBufferPool.recycle(buffer);
+					}
+					buffer = next;
 				}
-			}else {				
-				ByteBuffer next = ByteBufferPool.obtain(p.estimateDecodeLen(l));
-				if(buffer == null) {
-					result = result && p.decode(origin, offset, len, next);
-				}else {
-					result = result && p.decode(buffer.array(), 0,buffer.position(),next);
-					ByteBufferPool.recycle(buffer);
+				
+				if(!result) {
+					break;
 				}
-				buffer = next;
 			}
-			
-			if(!result) {
-				break;
-			}
+		}else {
+			outBuffer.put(origin, offset, len);
 		}
+		
 		
 		if(!result) {
 			Log.e(TAG, "deProguard failed.");
@@ -249,30 +254,35 @@ public class Cipher {
 		boolean result = true;
 		int l = len;
 		ByteBuffer buffer = null;
-		for(int i=0;i<ps.size();i++) {
-			IProguarder p = ps.get(i);
-			if(i == ps.size() -1) {
-				if(buffer == null) {
-					result = result && p.encode(origin, offset, len, outBuffer);
-				}else {
-					result = result && p.encode(buffer.array(), 0, buffer.position(), outBuffer);
-					ByteBufferPool.recycle(buffer);
+		if(ps.size() > 0) {
+			for(int i=0;i<ps.size();i++) {
+				IProguarder p = ps.get(i);
+				if(i == ps.size() -1) {
+					if(buffer == null) {
+						result = result && p.encode(origin, offset, len, outBuffer);
+					}else {
+						result = result && p.encode(buffer.array(), 0, buffer.position(), outBuffer);
+						ByteBufferPool.recycle(buffer);
+					}
+				}else {				
+					ByteBuffer next = ByteBufferPool.obtain(p.estimateEncodeLen(l));
+					if(buffer == null) {
+						result = result && p.encode(origin, offset, len, next);
+					}else {
+						result = result && p.encode(buffer.array(), 0,buffer.position(),next);
+						ByteBufferPool.recycle(buffer);
+					}
+					buffer = next;
 				}
-			}else {				
-				ByteBuffer next = ByteBufferPool.obtain(p.estimateEncodeLen(l));
-				if(buffer == null) {
-					result = result && p.encode(origin, offset, len, next);
-				}else {
-					result = result && p.encode(buffer.array(), 0,buffer.position(),next);
-					ByteBufferPool.recycle(buffer);
+				
+				if(!result) {
+					break;
 				}
-				buffer = next;
 			}
-			
-			if(!result) {
-				break;
-			}
+		}else {
+			outBuffer.put(origin, offset, len);
 		}
+		
 		
 		if(!result) {
 			Log.e(TAG, "deProguard failed.");
