@@ -131,27 +131,34 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 		mWorking = true;
 		Messenger.notifyMessage(mListener, IProxyListener.PROXY_START, mIsLocal,mPort, mProxyHost,mProxyPort);
 		
+		long lastcheck = System.currentTimeMillis();
 		Log.r(TAG, "start success >>> listening " + mPort);
 		while(mWorking) {
 			long now = System.currentTimeMillis();
 			long cost = now;
 			
-			
 			int sel = 0;
 			try {
 				Log.d(TAG, "select next ops...");
-				final long TIMEOUT = 10*1000;
-				if((sel = mSelector.select(10*1000)) == 0) {
-					Log.d(TAG, "nothing to do,go next... " + mSelector.selectedKeys().size());
-					
+				final long TIMEOUT = 10*1000L;
+				sel = mSelector.select(10*1000);
+				
+				if(System.currentTimeMillis() - lastcheck > TIMEOUT) {
+					Log.t(TAG, "onPeriodicCheck " + TIMEOUT);
 					Set<SelectionKey> regKeys = mSelector.keys();
 		            Iterator<SelectionKey> it = regKeys.iterator();  
 		            while (it.hasNext()) {
 		            	SelectionKey key = it.next();
 		            	if(key != null && key.attachment() instanceof IAcceptor) {
-	            			((IAcceptor)key.attachment()).onTimeout(TIMEOUT);
+	            			((IAcceptor)key.attachment()).onPeriodicCheck(TIMEOUT);
 	            		}
 		            }
+		            
+		            lastcheck = System.currentTimeMillis();
+				}
+				
+				if(sel == 0) {
+					Log.d(TAG, "nothing to do,go next... " + mSelector.selectedKeys().size());
 					continue;
 				}
 				Log.d(TAG, "selected ops: " + sel);
@@ -267,7 +274,7 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 	}
 	
 	@Override
-	public void onTimeout(long timeout) {
+	public void onPeriodicCheck(long timeout) {
 		
 	}
 

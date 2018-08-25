@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 
 import com.chedifier.ladder.base.ArrayUtils;
 import com.chedifier.ladder.base.Log;
+import com.chedifier.ladder.base.StringUtils;
 import com.chedifier.ladder.memory.ByteBufferPool;
 
 public class Cipher {

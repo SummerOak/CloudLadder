@@ -49,15 +49,15 @@ public class AcceptorWrapper {
 		}
 
 		@Override
-		public void onTimeout(long timeout) {
-			mA.onTimeout(timeout);
+		public void onPeriodicCheck(long timeout) {
+			mA.onPeriodicCheck(timeout);
 			sWAcceptorPool.recycle(this);
 		}
 	}
 	
 	public static interface IAcceptor {
 		public Error accept(SelectionKey selKey,int opts);
-		public void onTimeout(long timeout);
+		public void onPeriodicCheck(long timeout);
 	}
 	
 }

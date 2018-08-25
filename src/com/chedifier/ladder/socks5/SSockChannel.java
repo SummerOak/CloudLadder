@@ -465,9 +465,8 @@ public class SSockChannel implements IAcceptor {
 	}
 	
 	@Override
-	public void onTimeout(long timeout) {
+	public void onPeriodicCheck(long timeout) {
 		mTimeout += timeout;
-		
 		if(mTimeout >= TIMEOUT) {
 			this.notifySocketClosed(Error.E_S5_SOCKETCHANNEL_ZOMBIE);
 		}
