@@ -5,7 +5,6 @@ import java.lang.Thread.UncaughtExceptionHandler;
 import com.chedifier.ladder.base.ExceptionHandler;
 import com.chedifier.ladder.base.Log;
 import com.chedifier.ladder.base.Log.ICallback;
-import com.chedifier.ladder.socks5.SProxy;
 
 public class CrashHandler {
 	private static final String TAG = "CrashHandler";

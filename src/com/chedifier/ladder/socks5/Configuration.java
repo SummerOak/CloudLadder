@@ -17,11 +17,6 @@ public class Configuration {
 	public static final String LOCAL_PORT 	= "local_port";
 	public static final String COMMAND_PORT 	= "command_port";
 	
-	public static final String CHUNKSIZE 	= "chunk_size";
-	public static final int DEFAULT_CHUNKSIZE = 1<<12;
-	public static final String BUFFER_SIZE 	= "buffer_size";
-	public static final int DEFAULT_BUFFERSIZE = DEFAULT_CHUNKSIZE<<1;
-	
 	public static final String LOG_PATH 		= "log_directory";
 	public static final String LOG_LEVL 		= "log_level";
 	

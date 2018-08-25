@@ -12,8 +12,14 @@ import com.chedifier.ladder.memory.ByteBufferPool;
 
 public class S5VerifyStage extends AbsS5Stage{
 	
+	private Cipher mCipher = new Cipher();
+	
 	public S5VerifyStage(AbsS5Stage stage) {
 		super(stage);
+	}
+	
+	public S5VerifyStage(SSockChannel channel,boolean isLocal,ICallback callback) {
+		super(channel,isLocal,callback);
 	}
 	
 	@Override
@@ -21,9 +27,7 @@ public class S5VerifyStage extends AbsS5Stage{
 		Log.r(getTag(), "S5VerifyStage start >>>");
 		super.start();
 		
-		if(isLocal()) {
-			getChannel().updateOps(true, true, SelectionKey.OP_READ);
-		}
+		getChannel().updateOps(true, true, SelectionKey.OP_READ);
 		
 		notifyState(SProxyIface.STATE.VERIFY);
 	}
@@ -73,16 +77,16 @@ public class S5VerifyStage extends AbsS5Stage{
 					return;
 				}
 			}else {
-				ByteBuffer decOutBuffer = ByteBufferPool.obtain(Cipher.estimateDecryptLen(verifyInfoLen,getChannel().getChunkSize()));
-				int dl = Cipher.decrypt(buffer.array(), 0, verifyInfoLen,getChannel().getChunkSize(),decOutBuffer);
+				ByteBuffer decOutBuffer = ByteBufferPool.obtain(mCipher.decryptLen(verifyInfoLen));
+				int dl = mCipher.decrypt(buffer.array(), 0, verifyInfoLen,decOutBuffer);
 				if(dl > 0) {
 					Log.d(getTag(), "recv verify data from local: " + StringUtils.toRawString(decOutBuffer.array(),0,decOutBuffer.position()));
 					int verifyResult = verify(decOutBuffer.array(), 0, decOutBuffer.position());
 					if(verifyResult > 0) {
 						Log.d(getTag(), "verify success.");
 						
-						ByteBuffer back = ByteBufferPool.obtain(Cipher.estimateEncryptLen(2, getChannel().getChunkSize()));
-						int el = Cipher.encrypt(new byte[] {0x05,0x00},getChannel().getChunkSize(),back);
+						ByteBuffer back = ByteBufferPool.obtain(mCipher.encryptLen(2));
+						int el = mCipher.encrypt(new byte[] {0x05,0x00},back);
 						if(el > 0) {
 							back.flip();
 							int ll = back.remaining();
@@ -115,8 +119,8 @@ public class S5VerifyStage extends AbsS5Stage{
 		if(isLocal()) {
 			if((opts&SelectionKey.OP_READ) > 0) {
 				ByteBuffer buffer = getChannel().getDestInBuffer();
-				ByteBuffer decOutBuffer = ByteBufferPool.obtain(Cipher.estimateDecryptLen(buffer.position(),getChannel().getChunkSize()));
-				int dl = Cipher.decrypt(buffer.array(), 0, buffer.position(),getChannel().getChunkSize(),decOutBuffer);
+				ByteBuffer decOutBuffer = ByteBufferPool.obtain(mCipher.decryptLen(buffer.position()));
+				int dl = mCipher.decrypt(buffer.array(), 0, buffer.position(),decOutBuffer);
 				if(dl > 0) {
 					Log.d(getTag(), "recv verify info back from server: " + StringUtils.toRawString(decOutBuffer.array(),0,decOutBuffer.position()));
 					decOutBuffer.flip();

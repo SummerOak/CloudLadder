@@ -4,7 +4,6 @@ import java.io.File;
 import java.util.ArrayList;
 
 import com.chedifier.ladder.base.JobScheduler.Job;
-import com.chedifier.ladder.base.Log.ICallback;
 import com.chedifier.ladder.memory.ByteBufferPool;
 import com.chedifier.ladder.socks5.Configuration;
 import com.chedifier.ladder.socks5.SProxy;
@@ -144,7 +143,8 @@ public class Log {
 	
 	public static final void dumpBeforeExit(ICallback callback) {
 		final String TAG = "dumper";
-		Log.r(TAG, "\n\n\n\n----------------------run-info-begin-------------------");
+		Log.r(TAG, "\n\n\n");
+		Log.r(TAG, "----------------------run-info-begin-------------------");
 		Log.r(TAG, "SProxy info: " + SProxy.dumpInfo());
 		Log.r(TAG, ByteBufferPool.dumpInfo());
 		Log.r(TAG, "----------------------run-info-end---------------------\n\n\n\n");

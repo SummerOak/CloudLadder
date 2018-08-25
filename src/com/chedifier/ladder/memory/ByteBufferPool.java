@@ -98,7 +98,7 @@ public class ByteBufferPool {
 					e.clear();
 					sMemInUsing += fsize;
 				}
-			},Integer.MAX_VALUE);
+			}, 100);
 			
 			sPool.put(fsize, pool);
 		}
@@ -106,10 +106,6 @@ public class ByteBufferPool {
 		ByteBuffer buffer = pool.obtain();
 		onBufferRentOut(ExceptionHandler.getStackTraceString(new Throwable()), buffer);
 		
-		if(buffer == null) {
-			Log.e(TAG, "obtain buffer from pool failed.");
-		}
-		notify(sMemInUsing,sMemTotal);
 		Log.i(TAG, "obtain: sMemTotal=" + sMemTotal + " sMemInPool="+sMemInUsing);
 		
 		return buffer;
@@ -120,8 +116,12 @@ public class ByteBufferPool {
 			int size = buffer.capacity();
 			ObjectPool<ByteBuffer> pool = sPool.get(size);
 			if(pool != null) {
-				if(pool.recycle(buffer)) {
+				int r = pool.recycle(buffer);
+				if(r > 0) {
 					sMemInUsing -= size;
+					if(r == 2) {
+						sMemTotal -= size;
+					}
 					onBufferBack(buffer);
 				}
 			}
@@ -131,7 +131,7 @@ public class ByteBufferPool {
 	}
 	
 	private static void onBufferRentOut(String user,ByteBuffer buffer) {
-		Log.i(TAG, "onBufferRentOut " + user);
+//		Log.i(TAG, "onBufferRentOut " + user);
 		if(buffer != null) {
 			long id = getByteBufferId(buffer);
 			MemInfo info = sMemInfo.get(id);
@@ -143,11 +143,14 @@ public class ByteBufferPool {
 			info.owner = user;
 			
 			sInUsing.add(id);
+			
+			notify(sMemInUsing,sMemTotal);
 		}
 	}
 	
 	private static void onBufferBack(ByteBuffer buffer) {
 		sInUsing.remove(getByteBufferId(buffer));
+		notify(sMemInUsing,sMemTotal);
 	}
 	
 	private static final long getByteBufferId(ByteBuffer buffer) {

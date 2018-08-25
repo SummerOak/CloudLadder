@@ -39,8 +39,6 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 	private ServerSocketChannel mSocketChannel = null;
 	private boolean mIsLocal;
 	
-	private int mChannelBufferSize;
-	private int mChunkSize;
 	private boolean mWorking = false;
 	private String mProxyHost = null;
 	private int mProxyPort;
@@ -79,16 +77,6 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 		mPort = port;
 		mIsLocal = isLocal;
 		mListener = l;
-		
-		mChannelBufferSize = Configuration.getConfigInt(Configuration.BUFFER_SIZE, Configuration.DEFAULT_BUFFERSIZE);
-		if (mChannelBufferSize <= 0 || mChannelBufferSize > (Configuration.DEFAULT_BUFFERSIZE << 1)) {
-			Log.e(TAG, "buffer size is too small or big, adjust to default.");
-			mChannelBufferSize = Configuration.DEFAULT_BUFFERSIZE;
-		}
-
-		Log.d(TAG, "buffer size is " + mChannelBufferSize);
-		
-		mChunkSize = Configuration.getConfigInt(Configuration.CHUNKSIZE, Configuration.DEFAULT_CHUNKSIZE);
 		
 		init();
 		
@@ -152,8 +140,18 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 			int sel = 0;
 			try {
 				Log.d(TAG, "select next ops...");
-				if((sel = mSelector.select()) == 0) {
+				final long TIMEOUT = 10*1000;
+				if((sel = mSelector.select(10*1000)) == 0) {
 					Log.d(TAG, "nothing to do,go next... " + mSelector.selectedKeys().size());
+					
+					Set<SelectionKey> regKeys = mSelector.keys();
+		            Iterator<SelectionKey> it = regKeys.iterator();  
+		            while (it.hasNext()) {
+		            	SelectionKey key = it.next();
+		            	if(key != null && key.attachment() instanceof IAcceptor) {
+	            			((IAcceptor)key.attachment()).onTimeout(TIMEOUT);
+	            		}
+		            }
 					continue;
 				}
 				Log.d(TAG, "selected ops: " + sel);
@@ -162,8 +160,6 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 			}
 			
 			now = System.currentTimeMillis();
-			Log.t(TAG, "cost1 " + (now - cost));
-			
 			
 			Set<SelectionKey> regKeys = mSelector.selectedKeys();
             Iterator<SelectionKey> it = regKeys.iterator();  
@@ -174,16 +170,13 @@ public class SProxy implements IAcceptor,IMemInfoListener{
             			continue;
             		}
             		
-//            		Log.d(TAG, "select " + key + " ops " + key.readyOps());
-            		
-            		
             		cost = System.currentTimeMillis();
             		if(key != null && key.attachment() instanceof IAcceptor) {
             			((IAcceptor)key.attachment()).accept(key,key.readyOps());
             		}
             		now = System.currentTimeMillis();
             		cost = now - cost;
-            		Log.t(TAG, "cost2 "+cost);
+//            		Log.t(TAG, "accept cost: "+cost);
             }
 		}
 		
@@ -242,7 +235,7 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 			mLivingRelayers.add(r);
 		}
 		
-		Log.r(TAG, "inc " + sAliveConnections);
+//		Log.r(TAG, "inc " + sAliveConnections);
 		Messenger.notifyMessage(mListener, IProxyListener.ALIVE_NUM, sAliveConnections);
 	}
 	
@@ -253,7 +246,7 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 			mLivingRelayers.remove(r);
 		}
 		
-		Log.r(TAG, "dec " + sAliveConnections);
+//		Log.r(TAG, "dec " + sAliveConnections);
 		Messenger.notifyMessage(mListener, IProxyListener.ALIVE_NUM, sAliveConnections);
 	}
 	
@@ -271,6 +264,11 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 			}
 		}
 		return null;
+	}
+	
+	@Override
+	public void onTimeout(long timeout) {
+		
 	}
 
 	private class Relayer implements ICallback,ITrafficEvent,ISpeedListener{
@@ -297,13 +295,13 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 			
 			incConnection(this);
 			
-			mChannel = new SSockChannel(mSelector,mChannelBufferSize,mChunkSize);
+			mChannel = new SSockChannel(mSelector);
 			mChannel.setConnId(mConnId);
 			mChannel.setSource(conn);
 			mChannel.setTrafficListener(this);
 			mMetrics = new SpeedMetrics(this);
 			
-			AbsS5Stage stage = new S5InitStage(mChannel, mIsLocal, this);
+			AbsS5Stage stage = new S5VerifyStage(mChannel, mIsLocal, this);
 			stage.setConnId(mConnId);
 			stage.start();
 			

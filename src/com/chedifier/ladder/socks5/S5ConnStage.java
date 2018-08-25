@@ -17,6 +17,7 @@ import com.chedifier.ladder.memory.ByteBufferPool;
 
 public class S5ConnStage extends AbsS5Stage{
 	private ConnInfo mConnInfo = new ConnInfo();
+	private Cipher mCipher = new Cipher();
 	public S5ConnStage(AbsS5Stage stage) {
 		super(stage);
 		
@@ -52,10 +53,10 @@ public class S5ConnStage extends AbsS5Stage{
 						return;
 					}
 					
-					int estLen = Cipher.estimateEncryptLen(buffer.position(), getChannel().getChunkSize());
+					int estLen = mCipher.encryptLen(buffer.position());
 					ByteBuffer outBuffer = ByteBufferPool.obtain(estLen);
 					if(outBuffer != null && outBuffer.remaining() >= estLen) {
-						if(Cipher.encrypt(buffer.array(), 0, buffer.position(),getChannel().getChunkSize(),outBuffer) > 0) {
+						if(mCipher.encrypt(buffer.array(), 0, buffer.position(),outBuffer) > 0) {
 							outBuffer.flip();
 							int l = outBuffer.remaining();
 							if(getChannel().writeToBuffer(true, outBuffer) == l) {
@@ -77,18 +78,18 @@ public class S5ConnStage extends AbsS5Stage{
 				}
 			}else {
 				Log.d(getTag(), "decrypt buffer: " + StringUtils.toRawString(buffer.array(),0,buffer.position()));
-				ByteBuffer outBuffer = ByteBufferPool.obtain(Cipher.estimateDecryptLen(buffer.position(),getChannel().getChunkSize()));
+				ByteBuffer outBuffer = ByteBufferPool.obtain(mCipher.decryptLen(buffer.position()));
 				if(outBuffer == null) {
 					Log.e(getTag(), "obtain outBuffer failed");
 					return ;
 				}
-				int dl = Cipher.decrypt(buffer.array(), 0, buffer.position(),getChannel().getChunkSize(),outBuffer);
+				int dl = mCipher.decrypt(buffer.array(), 0, buffer.position(),outBuffer);
 				if(dl > 0) {
 					Log.i(getTag(),"recv conn info: " + StringUtils.toRawString(outBuffer.array(),0,outBuffer.position()));
 					int buildConnInfoResult = buildConnInfo(mConnInfo,outBuffer.array(), 0, outBuffer.position());
 					if(buildConnInfoResult > 0) {
 						notifyConnInfo();
-						Log.d(getTag(), "build conn info success.");
+						Log.d(getTag(), "build conn info success. " + mConnInfo);
 						InetSocketAddress remoteAddr = buildRemoteAddress(mConnInfo);
 						Log.d(getTag(), "build remote address: " + remoteAddr);
 						if(remoteAddr != null) {
@@ -107,10 +108,10 @@ public class S5ConnStage extends AbsS5Stage{
 								rep.put(mConnInfo.addrInfo.addr);
 								rep.put(mConnInfo.addrInfo._port);
 								
-								int estLen = Cipher.estimateEncryptLen(rep.position(),getChannel().getChunkSize());
+								int estLen = mCipher.encryptLen(rep.position());
 								ByteBuffer outResult  = ByteBufferPool.obtain(estLen);
 								if(outResult != null && outResult.remaining() >= estLen) {
-									int el = Cipher.encrypt(rep.array(),0,rep.position(),getChannel().getChunkSize(),outResult);
+									int el = mCipher.encrypt(rep.array(),0,rep.position(),outResult);
 									if(el > 0) {
 										outResult.flip();
 										int l = outResult.remaining();
@@ -174,9 +175,9 @@ public class S5ConnStage extends AbsS5Stage{
 			if((opts&SelectionKey.OP_READ) > 0) {
 				ByteBuffer buffer = getChannel().getDestInBuffer();
 				Log.i(getTag(),"recv conn from server: " + StringUtils.toRawString(buffer.array(), buffer.position()));
-				ByteBuffer outBuffer = ByteBufferPool.obtain(Cipher.estimateDecryptLen(buffer.position(),getChannel().getChunkSize()));
+				ByteBuffer outBuffer = ByteBufferPool.obtain(mCipher.decryptLen(buffer.position()));
 				if(outBuffer != null) {
-					int dl = Cipher.decrypt(buffer.array(), 0, buffer.position(),getChannel().getChunkSize(),outBuffer);
+					int dl = mCipher.decrypt(buffer.array(), 0, buffer.position(),outBuffer);
 					if(dl > 0) {
 						outBuffer.flip();
 						int ll = outBuffer.remaining();
@@ -196,6 +197,7 @@ public class S5ConnStage extends AbsS5Stage{
 				
 				return;
 			}
+			
 		}
 		
 //		Log.e(getTag(), "unexpected opts " + opts + " from src.");
@@ -264,7 +266,7 @@ public class S5ConnStage extends AbsS5Stage{
 				}
 				
 				default:{
-					Log.e(getTag(), "wrong address type.");
+					Log.e(getTag(), "not supported address type: " + addrType);
 					return -1;
 				}
 					
@@ -297,7 +299,7 @@ public class S5ConnStage extends AbsS5Stage{
 				if(addrInfo.addrtp == AddrInfo.ADDR_DOMAIN) {					
 					domain = StringUtils.toString(addrInfo.addr);
 				}else {
-					ip = StringUtils.toRawString(addrInfo.addr);
+					ip = StringUtils.bytes2IP(addrInfo.addrtp==1?4:6, addrInfo.addr);
 				}
 				
 				port = mConnInfo.addrInfo.port;

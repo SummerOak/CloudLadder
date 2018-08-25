@@ -47,10 +47,17 @@ public class AcceptorWrapper {
 			sWAcceptorPool.recycle(this);
 			return res;
 		}
+
+		@Override
+		public void onTimeout(long timeout) {
+			mA.onTimeout(timeout);
+			sWAcceptorPool.recycle(this);
+		}
 	}
 	
 	public static interface IAcceptor {
 		public Error accept(SelectionKey selKey,int opts);
+		public void onTimeout(long timeout);
 	}
 	
 }

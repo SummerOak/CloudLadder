@@ -30,6 +30,8 @@ public class S5TransStage extends AbsS5Stage{
 	public void onSourceOpts(int opts) {
 		if((opts&SelectionKey.OP_READ) > 0) {
 			getChannel().relay(true, isLocal());
+		}else if((opts&SelectionKey.OP_WRITE) > 0) {
+			getChannel().relay(false, !isLocal());
 		}
 	}
 	
@@ -37,6 +39,8 @@ public class S5TransStage extends AbsS5Stage{
 	public void onDestOpts(int opts) {
 		if((opts&SelectionKey.OP_READ) > 0) {
 			getChannel().relay(false, !isLocal());
+		}else if((opts&SelectionKey.OP_READ) > 0){
+			getChannel().relay(true, isLocal());
 		}
 		
 	}

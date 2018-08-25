@@ -17,6 +17,21 @@ public class StringUtils {
 		return toRawString(data,0,length);
 	}
 	
+	/**
+	 * converts bytes to ip address
+	 * @param ipver
+	 * @param bytes
+	 * @return
+	 */
+	public static String bytes2IP(int ipver, byte[] bytes) {
+		if(ipver != 4 && ipver != 6 || bytes == null || ipver == 4 && bytes.length < 4 || ipver==6 && bytes.length < 16) {
+			return "";
+		}
+		return new StringBuffer().append(bytes[0] & 0xFF).append('.').append(
+                bytes[1] & 0xFF).append('.').append(bytes[2] & 0xFF)
+                .append('.').append(bytes[3] & 0xFF).toString();
+	}
+	
 	public static String toRawString(byte[] data,int offset,int length) {
 		if(data != null && ArrayUtils.isValidateRange(data.length, offset, length)) {
 			StringBuilder sb = new StringBuilder(length << 1);

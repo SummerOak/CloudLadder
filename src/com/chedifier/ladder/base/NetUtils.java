@@ -48,7 +48,7 @@ public class NetUtils {
 		return null;
 	}
 	
-	public static final String getOpsDest(int ops) {
+	public static final String getOpsDesc(int ops) {
 		String dest = "";
 		if((ops&SelectionKey.OP_ACCEPT) > 0) {
 			dest += "accept&";

@@ -24,23 +24,31 @@ public class ExternalCmdHandler {
 	
 	public static final int MAX_COMMAND_LEN = 1024;
 	
+	private Cipher mCipher = new Cipher();
+	private static class Holder{
+		public static ExternalCmdHandler sInstance = new ExternalCmdHandler();
+	}
+	
+	private static ExternalCmdHandler getInstance() {
+		return Holder.sInstance;
+	}
+	
 	public static void start() {
 		new Thread() {
 			@Override
 			public void run() {
-				accept();
+				getInstance().accept();
 				
 				SProxyIface.stop("external cmd service failed.");
 			}
 		}.start();
 	}
 	
-	private static void accept() {
+	private void accept() {
 		int port = Configuration.getConfigInt(Configuration.COMMAND_PORT, 0);
-		int chunkSize = Configuration.getConfigInt(Configuration.CHUNKSIZE, Configuration.DEFAULT_CHUNKSIZE);
 		ServerSocket socket = null;
 		byte[] rawCmd = new byte[MAX_COMMAND_LEN];
-		ByteBuffer decrypt = ByteBufferPool.obtain(Cipher.estimateDecryptLen(rawCmd.length, chunkSize));
+		ByteBuffer decrypt = ByteBufferPool.obtain(mCipher.decryptLen(rawCmd.length));
 		int r = 0;
 		try {
 			socket = new ServerSocket(port);
@@ -51,7 +59,7 @@ public class ExternalCmdHandler {
 				if((r=is.read(rawCmd)) > 0){
 					Command command = new Command();
 					decrypt.clear();
-					int dl = Cipher.decrypt(rawCmd, 0, r, chunkSize, decrypt);
+					int dl = mCipher.decrypt(rawCmd, 0, r, decrypt);
 					if(dl > 0) {
 						Error checkResult = parseExternalCmd(decrypt.array(),0,decrypt.position(),command);
 						Log.d(TAG, "parseCommand " + checkResult);
@@ -69,10 +77,15 @@ public class ExternalCmdHandler {
 			ExceptionHandler.handleException(t);
 		}finally {
 			IOUtils.safeClose(socket);
+			ByteBufferPool.recycle(decrypt);
 		}
 	}
 	
 	public static void sendCommand(boolean isLocal,int cmd,String params,String user,String password) {
+		getInstance().sendCommandInternal(isLocal, cmd, params, user, password);
+	}
+	
+	private void sendCommandInternal(boolean isLocal,int cmd,String params,String user,String password) {
 		String host = "127.0.0.1";;
 		int port = Configuration.getConfigInt(Configuration.COMMAND_PORT, 0);;
 		
@@ -91,9 +104,8 @@ public class ExternalCmdHandler {
 			byte[] origin = command.parcel().getBytes();
 			
 			if(origin != null && origin.length > 0) {
-				int chunkSize = Configuration.getConfigInt(Configuration.CHUNKSIZE, Configuration.DEFAULT_CHUNKSIZE);
-				ByteBuffer outBuffer = ByteBufferPool.obtain(Cipher.estimateEncryptLen(origin.length, chunkSize));
-				int el = Cipher.encrypt(origin, chunkSize, outBuffer);
+				ByteBuffer outBuffer = ByteBufferPool.obtain(mCipher.encryptLen(origin.length));
+				int el = mCipher.encrypt(origin, outBuffer);
 				if(el > 0) {
 					os.write(outBuffer.array(),0,outBuffer.position());
 					Log.r(TAG, "send command " + host + "/" + port + " success.");
