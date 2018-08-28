@@ -10,6 +10,10 @@ import com.chedifier.ladder.socks5.SProxy;
 
 public class Log {
 	
+	private static final int LOG_DEBUG = 1;
+	private static final int LOG_INFO = 2;
+	
+	
 	private static int sLogLevel = 0;
 	private static String sLogDir;
 	private static final String DEF_DIR = Configuration.DEFAULT_LOG_PATH;
@@ -28,13 +32,13 @@ public class Log {
 	}
 
 	public static final void i(String tag,String content) {
-		if(sLogLevel > 2) {
+		if(sLogLevel >= LOG_INFO) {
 			System.out.println(DateUtils.getCurrentDate() + " : " + "I> tid[" + Thread.currentThread().getId() + "] " + tag + " >> " + content);
 		}
 	}
 	
 	public static final void d(String tag,String content) {
-		if(sLogLevel > 1) {
+		if(sLogLevel >= LOG_DEBUG) {
 			System.out.println(DateUtils.getCurrentDate() + " : " + "D> tid[" + Thread.currentThread().getId() + "] " + tag + " >> " + content);
 		}
 	}

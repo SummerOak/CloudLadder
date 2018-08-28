@@ -343,7 +343,7 @@ public class SSockChannel implements IAcceptor {
 	public void updateOps(boolean src, boolean add, int opts) {
 		Log.i(getTag(), "updateOps " + (add?"enable ":"disable ") + (src?" src " :" dest ") + opts + ": " + NetUtils.getOpsDesc(opts));
 		SelectionKey key = src ? mSourceKey : mDestKey;
-		if (key != null) {
+		if (key != null && key.isValid()) {
 			int oldOps = key.interestOps();
 			opts = add ? (opts | oldOps) : (oldOps & (~opts));
 		}
@@ -374,18 +374,23 @@ public class SSockChannel implements IAcceptor {
 			return false;
 		}
 		
-		if((mDestKey != null && mDestKey.interestOps() != 0) || (mSourceKey != null && mSourceKey.interestOps() != 0)) {
-			return true;
+		if(mDestKey != null && (!mDestKey.isValid() || mDestKey.interestOps() == 0) && mDownStreamBufferOut.position() <= 0) {
+			return false;
 		}
 		
-		if(mUpStreamBufferOut.position() != 0 || mDownStreamBufferOut.position() != 0) {
-			return true;
+		if(mSourceKey != null && (!mSourceKey.isValid() || mSourceKey.interestOps() == 0) && mUpStreamBufferOut.position() <= 0) {
+			return false;
 		}
 		
-		Log.e(getTag(), "socket has died,channel will closed.");
-		notifySocketClosed(Error.E_S5_CHANNEL_DEAD);
+//		if((mDestKey != null && mDestKey.interestOps() != 0) || (mSourceKey != null && mSourceKey.interestOps() != 0)) {
+//			return true;
+//		}
+//		
+//		if(mUpStreamBufferOut.position() != 0 || mDownStreamBufferOut.position() != 0) {
+//			return true;
+//		}
 		
-		return false;
+		return true;
 	}
 
 	public synchronized void destroy() {
@@ -554,6 +559,7 @@ public class SSockChannel implements IAcceptor {
 					if(++mRetryTimesWhileReadNull > MAX_RETRY_FOR_READ) {
 						Log.e(getTag(), "read from dest failed," + r + " pause dest read.");
 						updateOps(false, false, SelectionKey.OP_READ);
+					
 					}
 				} else {	
 					mRetryTimesWhileReadNull = 0;
@@ -589,7 +595,10 @@ public class SSockChannel implements IAcceptor {
 			}
 		}
 		
-		checkAlive();
+		if(!checkAlive()) {
+			Log.e(getTag(), "socket has died,channel will closed.");
+			notifySocketClosed(Error.E_S5_CHANNEL_DEAD);
+		}
 
 		return null;
 	}
