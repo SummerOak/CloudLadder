@@ -4,7 +4,6 @@ import java.nio.ByteBuffer;
 
 import com.chedifier.ladder.base.ArrayUtils;
 import com.chedifier.ladder.base.Log;
-import com.chedifier.ladder.base.StringUtils;
 
 public class ShiftProguarder implements ICoder{
 	
@@ -39,8 +38,7 @@ public class ShiftProguarder implements ICoder{
 		}
 		
 		byte s = (byte)(1 + (int)(Math.random() * 7));
-		byte m = (byte)(((1<<s)-1) << (8-s));
-		Log.i(TAG,"shift " + s + " msk " + m);
+		Log.i(TAG,"shift " + s);
 		
 		outBuffer.put(s); 
 		int i;
@@ -50,8 +48,6 @@ public class ShiftProguarder implements ICoder{
 			if(++s>7) {
 				s=0;
 			}
-			
-			m = (byte)(((1<<s)-1) << (8-s));
 		}
 		
 		return i+1;
@@ -70,8 +66,7 @@ public class ShiftProguarder implements ICoder{
 		}
 		
 		byte s = encode[offset];
-		byte m = (byte)(((1<<s)-1));
-		Log.i(TAG,"shift " + s + " msk " + m);
+		Log.i(TAG,"shift " + s);
 		int i;
 		for(i=1;i<len&&((offset+i)<encode.length);i++) {
 			outBuffer.put((byte)(((encode[offset+i]&0xFF)>>s)|((encode[offset+i]&0xFF)<<(8-s))));
@@ -79,8 +74,6 @@ public class ShiftProguarder implements ICoder{
 			if(++s>7) {
 				s=0;
 			}
-			
-			m = (byte)(((1<<s)-1) << (8-s));
 		}
 		
 		return i-1;

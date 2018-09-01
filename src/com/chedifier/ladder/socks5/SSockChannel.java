@@ -44,7 +44,7 @@ public class SSockChannel implements IAcceptor {
 	
 	private boolean mAlive = false;
 	private long mTimeout = 0L;
-	private final long TIMEOUT = 25*1000L;
+	private final long IDLE_TIMEOUT = 3600*1000L;
 
 	private IChannelEvent mListener;
 	private ITrafficEvent mTrafficListener;
@@ -130,7 +130,7 @@ public class SSockChannel implements IAcceptor {
 
 	public int relay(boolean up, boolean encrypt) {
 		if (!mAlive) {
-			Log.e(getTag(), "relay>>> channel has died.");
+			Log.e(getTag(), "relay failed, channel has died.");
 			return -1;
 		}
 
@@ -203,6 +203,13 @@ public class SSockChannel implements IAcceptor {
 					break;
 				}
 				
+				int estl = mCipher.encryptLen(len);
+				if(estl > dest.remaining()) {
+					Log.e(getTag(), "encryptRelay>>> out buffer may be full filled: need " + estl + " remain " + dest.remaining());
+					notifyRelayFailed(Error.E_S5_OUT_BUFFER_FULL_FILLED);
+					break;
+				}
+				
 				int el = mCipher.encrypt(src.array(), r, len,outBuffer);
 				if (el > 0) {
 					outBuffer.flip();
@@ -263,6 +270,12 @@ public class SSockChannel implements IAcceptor {
 		try {
 			while(true) {
 				if(len <= 0) {
+					break;
+				}
+				
+				if(dest.remaining() < Cipher.MAX_PARCEL_SIZE) {
+					Log.e(getTag(), "decryptRelay>>> out buffer maybe full filled,need " + Cipher.MAX_PARCEL_SIZE + " remain " + dest.remaining());
+					notifyRelayFailed(Error.E_S5_OUT_BUFFER_FULL_FILLED);
 					break;
 				}
 				
@@ -343,7 +356,11 @@ public class SSockChannel implements IAcceptor {
 	public void updateOps(boolean src, boolean add, int opts) {
 		Log.i(getTag(), "updateOps " + (add?"enable ":"disable ") + (src?" src " :" dest ") + opts + ": " + NetUtils.getOpsDesc(opts));
 		SelectionKey key = src ? mSourceKey : mDestKey;
-		if (key != null && key.isValid()) {
+		if (key != null && !key.isValid()) {
+			return;
+		}
+		
+		if(key != null) {
 			int oldOps = key.interestOps();
 			opts = add ? (opts | oldOps) : (oldOps & (~opts));
 		}
@@ -366,7 +383,7 @@ public class SSockChannel implements IAcceptor {
 	}
 	
 	private boolean hasOps(SelectionKey key,int intres) {
-		return (key != null && (key.interestOps()&intres) > 0);
+		return (key != null && key.isValid() && (key.interestOps()&intres) > 0);
 	}
 	
 	private boolean checkAlive() {
@@ -374,21 +391,17 @@ public class SSockChannel implements IAcceptor {
 			return false;
 		}
 		
-		if(mDestKey != null && (!mDestKey.isValid() || mDestKey.interestOps() == 0) && mDownStreamBufferOut.position() <= 0) {
+		if(mDestKey != null && (!mDestKey.isValid() || mDestKey.interestOps() == 0) 
+				&& mDownStreamBufferIn.position() <= 0
+				&& mDownStreamBufferOut.position() <= 0) {
 			return false;
 		}
 		
-		if(mSourceKey != null && (!mSourceKey.isValid() || mSourceKey.interestOps() == 0) && mUpStreamBufferOut.position() <= 0) {
+		if(mSourceKey != null && (!mSourceKey.isValid() || mSourceKey.interestOps() == 0) 
+				&& mUpStreamBufferIn.position() <= 0
+				&& mUpStreamBufferOut.position() <= 0) {
 			return false;
 		}
-		
-//		if((mDestKey != null && mDestKey.interestOps() != 0) || (mSourceKey != null && mSourceKey.interestOps() != 0)) {
-//			return true;
-//		}
-//		
-//		if(mUpStreamBufferOut.position() != 0 || mDownStreamBufferOut.position() != 0) {
-//			return true;
-//		}
 		
 		return true;
 	}
@@ -472,7 +485,8 @@ public class SSockChannel implements IAcceptor {
 	@Override
 	public void onPeriodicCheck(long timeout) {
 		mTimeout += timeout;
-		if(mTimeout >= TIMEOUT) {
+		if(mTimeout >= IDLE_TIMEOUT) {
+			Log.e(getTag(), "timeout, close channel");
 			this.notifySocketClosed(Error.E_S5_SOCKETCHANNEL_ZOMBIE);
 		}
 	}
@@ -492,10 +506,14 @@ public class SSockChannel implements IAcceptor {
 				int r = read(mSource, mUpStreamBufferIn);
 				if (r <= 0) {
 					if(++mRetryTimesWhileReadNull > MAX_RETRY_FOR_READ) {
-						Log.e(getTag(), "read data in src failed." + r + " block read in.");
+						Log.t(getTag(), "read data in src failed." + r + " block read in.");
+						mSourceKey.cancel();
+//						updateOps(true, false, SelectionKey.OP_READ);
+					}else {
 						updateOps(true, false, SelectionKey.OP_READ);
 					}
 				} else {
+					Log.d(getTag(), "read frome src " + r + "bytes");
 					mRetryTimesWhileReadNull = 0;
 					onSrcIn(r);
 				}
@@ -515,7 +533,7 @@ public class SSockChannel implements IAcceptor {
 
 						onSrcOut(w);
 					}else {
-						Log.e(getTag(), "write to src failed," + w + " pause src write.");
+						Log.t(getTag(), "write to src failed," + w + " pause src write.");
 						updateOps(true, false, SelectionKey.OP_WRITE);
 					}
 				}
@@ -557,11 +575,14 @@ public class SSockChannel implements IAcceptor {
 				int r = read(mDest, mDownStreamBufferIn);
 				if (r <= 0) {
 					if(++mRetryTimesWhileReadNull > MAX_RETRY_FOR_READ) {
-						Log.e(getTag(), "read from dest failed," + r + " pause dest read.");
+						Log.t(getTag(), "read from dest failed," + r + " pause dest read.");
+						mDestKey.cancel();
+//						updateOps(false, false, SelectionKey.OP_READ);
+					}else {
 						updateOps(false, false, SelectionKey.OP_READ);
-					
 					}
 				} else {	
+					Log.d(getTag(), "read frome dest " + r + "bytes");
 					mRetryTimesWhileReadNull = 0;
 					onDestIn(r);
 				}
@@ -580,7 +601,7 @@ public class SSockChannel implements IAcceptor {
 
 						onDestOut(w);
 					}else {
-						Log.e(getTag(), "write to dest failed," + w + " pause dest write.");
+						Log.t(getTag(), "write to dest failed," + w + " pause dest write.");
 						updateOps(false, false, SelectionKey.OP_WRITE);
 					}
 				}
@@ -596,7 +617,7 @@ public class SSockChannel implements IAcceptor {
 		}
 		
 		if(!checkAlive()) {
-			Log.e(getTag(), "socket has died,channel will closed.");
+			Log.d(getTag(), "socket has died,channel will closed.");
 			notifySocketClosed(Error.E_S5_CHANNEL_DEAD);
 		}
 

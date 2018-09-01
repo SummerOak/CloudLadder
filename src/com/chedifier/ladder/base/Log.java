@@ -45,7 +45,7 @@ public class Log {
 	
 	public static final void e(String tag,String content) {
 		String s = DateUtils.getCurrentDate() + " : " + "E> tid[" + Thread.currentThread().getId() + "] " + tag + " >> " + content;
-		System.out.println(s);
+		System.err.println(s);
 		addLog(s);
 	}
 	

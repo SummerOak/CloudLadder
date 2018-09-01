@@ -45,7 +45,7 @@ public class PaddingProguarder implements ICoder{
 				if(outBuffer.remaining() < p+len+2) {
 					return 0;
 				}
-				outBuffer.put((byte)((p>>8)&0xFF));
+				outBuffer.put((byte)(((p&0xFF00)>>8)&0xFF));
 				outBuffer.put((byte)(p&0xFF));
 				for(int i=0;i<p;i++) {
 					outBuffer.put((byte)(Math.random() * 256));

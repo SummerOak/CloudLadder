@@ -4,15 +4,14 @@ import java.nio.ByteBuffer;
 
 import com.chedifier.ladder.base.ArrayUtils;
 import com.chedifier.ladder.base.Log;
-import com.chedifier.ladder.base.StringUtils;
 import com.chedifier.ladder.memory.ByteBufferPool;
 
 public class Cipher {
 	private static final String TAG = "Cipher";
 
 	private static final int BLOCK_SIZE = 1<<10;
-	public static final int MAX_PARCEL_SIZE = BLOCK_SIZE<<2;
-	public static final int MAX_ENCRYPT_SIZE = MAX_PARCEL_SIZE>>1;
+	public static final int MAX_ENCRYPT_SIZE = BLOCK_SIZE<<2;
+	public static final int MAX_PARCEL_SIZE = MAX_ENCRYPT_SIZE<<1;
 	
 	private final byte[] mCodes = {1,2};
 	private ICoder[] mCoders = new ICoder[CODER.END];
@@ -60,6 +59,9 @@ public class Cipher {
 		
 		int r = pack(s.array(), 0, s.position(), outBuffer);
 		if(r <= 0) {
+			ByteBufferPool.recycle(s);
+			ByteBufferPool.recycle(t);
+			
 			Log.e(TAG, "pack failed.");
 			return 0;
 		}
@@ -153,7 +155,7 @@ public class Cipher {
 	}
 	
 	private static int estimatePackLen(int len) {
-		return ((len/BLOCK_SIZE)<<1) + 2 + len;
+		return (((len+BLOCK_SIZE)/BLOCK_SIZE)<<1) + 2 + len;
 	}
 	
 	private static int estimateUnpackLen(int len) {
@@ -176,7 +178,7 @@ public class Cipher {
 		int s = 0, r = len, b = 0;
 		while(r > 0) {
 			b = r>BLOCK_SIZE?BLOCK_SIZE:r;
-			outBuffer.put((byte)((b>>8)&0xFF));
+			outBuffer.put((byte)(((b&0xFF00)>>8)));
 			outBuffer.put((byte)(b&0xFF));
 			outBuffer.put(origin, offset+s, b);
 			r -= b;
@@ -208,15 +210,20 @@ public class Cipher {
 		int blockSize = 0;
 		outBuffer.mark();
 		while(true) {
-			if(i+1>=len) {
+			if(i+2 > len) {
 				break;
 			}
 			
-			blockSize = (((int)(data[offset+i])&0xFF)<<8)|(((int)(data[offset+i+1]&0xFF)));
+			blockSize = ((int)((data[offset+i]&0xFF)<<8))|((int)((data[offset+i+1]&0xFF)));
 			i+=2;
 			
+			if(blockSize > BLOCK_SIZE) {
+				Log.e(TAG, "block exceeded " + blockSize);
+				break;
+			}
+			
 			if(i+blockSize > len) {
-				Log.e(TAG, "package not completed.");
+				Log.e(TAG, "package not completed. blocksize " + blockSize + " data len " + len + " i " + i);
 				break;
 			}
 			
@@ -273,6 +280,10 @@ public class Cipher {
 	}
 	
 	public int encryptLen(int len) {
+		if(len > MAX_ENCRYPT_SIZE) {
+			len = MAX_ENCRYPT_SIZE;
+		}
+		
 		++len;
 		if(mCodes != null) {
 			for(int i=0;i<mCodes.length; i++) {

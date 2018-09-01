@@ -156,6 +156,10 @@ public class S5ConnStage extends AbsS5Stage{
 	private InetSocketAddress buildRemoteAddress(ConnInfo connInfo) {
 		byte[] addr = connInfo.addrInfo.addr;
 		int port = connInfo.addrInfo.port;
+		if(port<0 || port > 65536) {
+			Log.e(getTag(), "invalidate port " + port);
+			return null;
+		}
 		InetSocketAddress netAddr = null;
 		if(connInfo.addrInfo.addrtp == 0x03) {
 			netAddr = new InetSocketAddress(StringUtils.toString(addr, addr.length), port);
@@ -276,7 +280,7 @@ public class S5ConnStage extends AbsS5Stage{
 				byte[] _port = new byte[2];
 				_port[0] = data[p];_port[1] = data[p+1];
 				addrInfo._port = _port;
-				addrInfo.port = ((data[p]) << 8) | (data[p+1] & 0xFF);
+				addrInfo.port = ((data[p]&0xFF) << 8) | (data[p+1] & 0xFF);
 				mConnInfo.addrInfo = addrInfo;
 				mConnInfo.connCmd = connCmd;
 				
