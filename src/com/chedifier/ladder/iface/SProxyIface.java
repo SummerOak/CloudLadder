@@ -4,7 +4,6 @@ import com.chedifier.ladder.base.JobScheduler;
 import com.chedifier.ladder.base.Log;
 import com.chedifier.ladder.base.StringUtils;
 import com.chedifier.ladder.crash.CrashHandler;
-import com.chedifier.ladder.external.ExternalCmdHandler;
 import com.chedifier.ladder.socks5.Configuration;
 import com.chedifier.ladder.socks5.SProxy;
 
@@ -15,13 +14,18 @@ public class SProxyIface {
 	
 	private static volatile SProxy sProxy = null;
 	
-	public static void init(String cfgFilePath) {
+	public static boolean init() {
 		if(!sInited) {
 			CrashHandler.init();
-			Configuration.init(cfgFilePath);
+			
+			if(!Configuration.init()) {
+				return false;
+			}
 			
 			sInited = true;
 		}
+		
+		return true;
 	}
 
 	public synchronized static void start(IProxyListener l,int forceServerOrLocal) {
@@ -42,10 +46,6 @@ public class SProxyIface {
 		if(sProxy != null) {			
 			sProxy.stop(reason);
 		}
-	}
-	
-	public static void sendExternCommand(boolean isLocal,int cmd,String params,String user,String password) {
-		ExternalCmdHandler.sendCommand(isLocal, cmd, params, user, password);
 	}
 	
 	private SProxy startSProxy(boolean isServer,IProxyListener l) {
@@ -88,8 +88,6 @@ public class SProxyIface {
 		
 		JobScheduler.init();
 		
-		ExternalCmdHandler.start();
-
 		boolean isServer = false;
 		if(forceServerOrLocal > 0) {
 			isServer = true;

@@ -14,16 +14,14 @@ import com.chedifier.ladder.base.ExceptionHandler;
 import com.chedifier.ladder.base.IOUtils;
 import com.chedifier.ladder.base.Log;
 import com.chedifier.ladder.base.ObjectPool;
+import com.chedifier.ladder.base.ObjectPool.IConstructor;
 import com.chedifier.ladder.base.Timer;
 import com.chedifier.ladder.base.TimerTask;
-import com.chedifier.ladder.base.ObjectPool.IConstructor;
 import com.chedifier.ladder.iface.Error;
 import com.chedifier.ladder.iface.IProxyListener;
 import com.chedifier.ladder.iface.SProxyIface;
 import com.chedifier.ladder.memory.ByteBufferPool;
 import com.chedifier.ladder.memory.ByteBufferPool.IMemInfoListener;
-import com.chedifier.ladder.metrics.ISpeedListener;
-import com.chedifier.ladder.metrics.SpeedMetrics;
 import com.chedifier.ladder.socks5.AbsS5Stage.ICallback;
 import com.chedifier.ladder.socks5.AcceptorWrapper.IAcceptor;
 import com.chedifier.ladder.socks5.SSockChannel.ITrafficEvent;
@@ -144,7 +142,7 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 				sel = mSelector.select(10*1000);
 				
 				if(System.currentTimeMillis() - lastcheck > TIMEOUT) {
-					Log.t(TAG, "onPeriodicCheck " + TIMEOUT);
+					Log.d(TAG, "onPeriodicCheck " + TIMEOUT);
 					Set<SelectionKey> regKeys = mSelector.keys();
 		            Iterator<SelectionKey> it = regKeys.iterator();  
 		            while (it.hasNext()) {
@@ -278,10 +276,9 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 		
 	}
 
-	private class Relayer implements ICallback,ITrafficEvent,ISpeedListener{
+	private class Relayer implements ICallback,ITrafficEvent{
 		
 		private SSockChannel mChannel;
-		private SpeedMetrics mMetrics;
 		private int mConnId;
 		private boolean mAlive;
 		
@@ -306,7 +303,6 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 			mChannel.setConnId(mConnId);
 			mChannel.setSource(conn);
 			mChannel.setTrafficListener(this);
-			mMetrics = new SpeedMetrics(this);
 			
 			AbsS5Stage stage = new S5VerifyStage(mChannel, mIsLocal, this);
 			stage.setConnId(mConnId);
@@ -364,31 +360,22 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 		}
 		
 		@Override
-		public void onSpeed(int tag, int speed) {
-			Messenger.notifyMessage(mListener,IProxyListener.SPEED, mConnId, (byte)(tag&0xFF), speed);
-		}
-		
-		@Override
 		public void onSrcIn(int len, long total) {
-			mMetrics.add(IProxyListener.SPEEDTYPE.SRC_IN, len);
 			Messenger.notifyMessage(mListener,IProxyListener.SRC_IN, mConnId, total);
 		}
 
 		@Override
 		public void onSrcOut(int len, long total) {
-			mMetrics.add(IProxyListener.SPEEDTYPE.SRC_OUT, len);
 			Messenger.notifyMessage(mListener,IProxyListener.SRC_OUT, mConnId, total);
 		}
 
 		@Override
 		public void onDestIn(int len, long total) {
-			mMetrics.add(IProxyListener.SPEEDTYPE.DEST_IN, len);
 			Messenger.notifyMessage(mListener,IProxyListener.DEST_IN, mConnId, total);
 		}
 
 		@Override
 		public void onDestOut(int len, long total) {
-			mMetrics.add(IProxyListener.SPEEDTYPE.DEST_OUT, len);
 			Messenger.notifyMessage(mListener,IProxyListener.DEST_OUT, mConnId, total);
 		}
 

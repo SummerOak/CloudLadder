@@ -506,7 +506,7 @@ public class SSockChannel implements IAcceptor {
 				int r = read(mSource, mUpStreamBufferIn);
 				if (r <= 0) {
 					if(++mRetryTimesWhileReadNull > MAX_RETRY_FOR_READ) {
-						Log.t(getTag(), "read data in src failed." + r + " block read in.");
+						Log.d(getTag(), "read data in src failed." + r + " block read in.");
 						mSourceKey.cancel();
 //						updateOps(true, false, SelectionKey.OP_READ);
 					}else {
@@ -533,7 +533,7 @@ public class SSockChannel implements IAcceptor {
 
 						onSrcOut(w);
 					}else {
-						Log.t(getTag(), "write to src failed," + w + " pause src write.");
+						Log.d(getTag(), "write to src failed," + w + " pause src write.");
 						updateOps(true, false, SelectionKey.OP_WRITE);
 					}
 				}
@@ -575,7 +575,7 @@ public class SSockChannel implements IAcceptor {
 				int r = read(mDest, mDownStreamBufferIn);
 				if (r <= 0) {
 					if(++mRetryTimesWhileReadNull > MAX_RETRY_FOR_READ) {
-						Log.t(getTag(), "read from dest failed," + r + " pause dest read.");
+						Log.d(getTag(), "read from dest failed," + r + " pause dest read.");
 						mDestKey.cancel();
 //						updateOps(false, false, SelectionKey.OP_READ);
 					}else {
@@ -601,7 +601,7 @@ public class SSockChannel implements IAcceptor {
 
 						onDestOut(w);
 					}else {
-						Log.t(getTag(), "write to dest failed," + w + " pause dest write.");
+						Log.d(getTag(), "write to dest failed," + w + " pause dest write.");
 						updateOps(false, false, SelectionKey.OP_WRITE);
 					}
 				}

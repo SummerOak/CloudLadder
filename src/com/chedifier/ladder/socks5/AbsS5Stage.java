@@ -2,7 +2,6 @@ package com.chedifier.ladder.socks5;
 
 import com.chedifier.ladder.base.Log;
 import com.chedifier.ladder.base.NetUtils;
-import com.chedifier.ladder.external.ExternalCmdHandler.Command;
 import com.chedifier.ladder.iface.Error;
 import com.chedifier.ladder.socks5.SSockChannel.IChannelEvent;
 
