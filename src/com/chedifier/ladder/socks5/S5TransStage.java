@@ -18,6 +18,10 @@ public class S5TransStage extends AbsS5Stage{
 	public void start() {
 		Log.r(getTag(), "S5TransStage start>>>");
 		super.start();
+		if(getChannel().getConnType() == SSockChannel.CONN_CMD_TCP) {
+			getChannel().setTimeout(3600*1000);
+		}
+		
 		notifyState(SProxyIface.STATE.TRANS);
 	}
 

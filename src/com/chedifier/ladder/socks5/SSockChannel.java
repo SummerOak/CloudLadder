@@ -2,9 +2,11 @@ package com.chedifier.ladder.socks5;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.DatagramChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
+import java.nio.channels.spi.AbstractSelectableChannel;
 
 import com.chedifier.ladder.base.ExceptionHandler;
 import com.chedifier.ladder.base.IOUtils;
@@ -20,11 +22,15 @@ public class SSockChannel implements IAcceptor {
 
 	private int mConnId;
 	private SocketChannel mSource;
-	private SocketChannel mDest;
+	private SocketChannel mTCPDest;
+	private DatagramChannel mUDPDest;
 	
 	private Selector mSelector;
 	private SelectionKey mSourceKey;
 	private SelectionKey mDestKey;
+	private byte mConnCmd = 0;
+	public static final byte CONN_CMD_TCP = 1;
+	public static final byte CONN_CMD_UDP = 2;
 	
 	private boolean mDestConnected;
 
@@ -44,7 +50,7 @@ public class SSockChannel implements IAcceptor {
 	
 	private boolean mAlive = false;
 	private long mTimeout = 0L;
-	private final long IDLE_TIMEOUT = 3600*1000L;
+	private long mTimeoutLimit = 10*1000L;
 
 	private IChannelEvent mListener;
 	private ITrafficEvent mTrafficListener;
@@ -84,25 +90,59 @@ public class SSockChannel implements IAcceptor {
 	public int getConnId() {
 		return mConnId;
 	}
+	
+	public void setTimeout(long timeout) {
+		mTimeoutLimit = timeout;
+	}
+	
+	public byte getConnType() {
+		return mConnCmd;
+	}
 
 	public void setDest(SocketChannel socket) {
-		Log.i(getTag(), "setDest " + socket + "  " + mDest);
+		Log.i(getTag(), "setDest " + socket + "  " + mTCPDest);
 		if (!mAlive) {
 			Log.e(getTag(), "setDest>>> channel has died.");
 			return;
 		}
-
-		if (mDest == null && socket != null) {
-			mDest = socket;
+		
+		if (mConnCmd == 0 && mTCPDest == null && socket != null) {
+			mTCPDest = socket;
 			try {
-				mDest.configureBlocking(false);
+				mTCPDest.configureBlocking(false);
 			} catch (IOException e) {
 				Log.i(getTag(), "configureBlocking failed " + e.getMessage());
 				ExceptionHandler.handleException(e);
 			}
 			
 			updateOps(false, true, SelectionKey.OP_CONNECT);
+			mConnCmd = CONN_CMD_TCP;
 
+			return;
+		}
+
+		Log.e(getTag(), "dest socket already setted,can not be set dumplicated.");
+	}
+	
+	public void setDest(DatagramChannel udpChannel) {
+		Log.i(getTag(), "setDest " + udpChannel + "  " + mUDPDest);
+		if (!mAlive) {
+			Log.e(getTag(), "setDest>>> channel has died.");
+			return;
+		}
+
+		if (mConnCmd == 0 && mUDPDest == null && udpChannel != null) {
+			mUDPDest = udpChannel;
+			try {
+				mUDPDest.configureBlocking(false);
+			} catch (IOException e) {
+				Log.i(getTag(), "configureBlocking failed " + e.getMessage());
+				ExceptionHandler.handleException(e);
+			}
+			
+			updateOps(false, true, SelectionKey.OP_READ);
+			mConnCmd = CONN_CMD_UDP;
+			
 			return;
 		}
 
@@ -339,7 +379,7 @@ public class SSockChannel implements IAcceptor {
 		return mDownStreamBufferOut;
 	}
 
-	private SelectionKey registerOpts(SocketChannel socketChannel, int ops) {
+	private SelectionKey registerOpts(AbstractSelectableChannel socketChannel, int ops) {
 		if (socketChannel != null) {
 			try {
 				SelectionKey selKey = socketChannel.register(mSelector, ops);
@@ -375,7 +415,7 @@ public class SSockChannel implements IAcceptor {
 			if(mDestKey != null && mDestKey.isValid()) {
 				mDestKey.interestOps(opts);
 			}else {				
-				mDestKey = registerOpts(mDest, opts);
+				mDestKey = registerOpts(mTCPDest==null?mUDPDest:mTCPDest, opts);
 			}
 		}
 		
@@ -424,9 +464,10 @@ public class SSockChannel implements IAcceptor {
 			mSourceKey = null;
 		}
 
-		IOUtils.safeClose(mDest);
+		IOUtils.safeClose(mTCPDest);
+		IOUtils.safeClose(mUDPDest);
 		IOUtils.safeClose(mSource);
-		mDest = mSource = null;
+		mTCPDest = mSource = null; mUDPDest = null;
 		mConnId = -1;
 		
 		if (mUpStreamBufferIn != null) {
@@ -463,8 +504,41 @@ public class SSockChannel implements IAcceptor {
 
 		return -1;
 	}
+	
+	private int read(DatagramChannel socketChannel, ByteBuffer buffer) {
+		try {
+			Log.d(getTag(), "pre read,buffer remain " + buffer.remaining());
+			int r = socketChannel.read(buffer);
+			Log.d(getTag(), "read " + r + " bytes,total " + buffer.position());
+			Log.i(getTag(), "read content: " + StringUtils.toRawString(buffer.array(), buffer.position() - r, r));
+			return r;
+		} catch (Throwable e) {
+			Log.e(getTag(), "read socket channel failed. " + e.getMessage());
+			ExceptionHandler.handleException(e);
+		}
+
+		return -1;
+	}
 
 	private int write(SocketChannel socketChannel, ByteBuffer buffer) {
+		try {
+			buffer.flip();
+			int w = socketChannel.write(buffer);
+
+			Log.d(getTag(), "write " + w + " bytes,remain " + buffer.remaining());
+			Log.i(getTag(), "write content: " + StringUtils.toRawString(buffer.array(), 0, w));
+
+			buffer.compact();
+			return w;
+		} catch (Throwable e) {
+			Log.e(getTag(), "write socket channel failed." + e.getMessage());
+			ExceptionHandler.handleException(e);
+		}
+
+		return -1;
+	}
+	
+	private int write(DatagramChannel socketChannel, ByteBuffer buffer) {
 		try {
 			buffer.flip();
 			int w = socketChannel.write(buffer);
@@ -485,7 +559,7 @@ public class SSockChannel implements IAcceptor {
 	@Override
 	public void onPeriodicCheck(long timeout) {
 		mTimeout += timeout;
-		if(mTimeout >= IDLE_TIMEOUT) {
+		if(mTimeout >= mTimeoutLimit) {
 			Log.e(getTag(), "timeout, close channel");
 			this.notifySocketClosed(Error.E_S5_SOCKETCHANNEL_ZOMBIE);
 		}
@@ -525,8 +599,9 @@ public class SSockChannel implements IAcceptor {
 					int w = write(mSource, mDownStreamBufferOut);
 
 					if (w > 0) {
-						if (mDownStreamBufferOut.remaining() > (BUFFER_SIZE >> 1) 
-								&& mDestConnected && mDestKey != null && mDest != null && !hasOps(mDestKey, SelectionKey.OP_READ)) {
+						if (mDownStreamBufferOut.remaining() > (BUFFER_SIZE >> 1)
+								&& (mConnCmd == CONN_CMD_TCP && mDestConnected && mTCPDest != null || (mConnCmd == CONN_CMD_UDP && mUDPDest != null)) 
+								&& mDestKey != null && !hasOps(mDestKey, SelectionKey.OP_READ)) {
 							Log.d(getTag(), "out buffer has enough remaining, open dest read in.");
 							updateOps(false, true, SelectionKey.OP_READ);
 						}
@@ -549,10 +624,10 @@ public class SSockChannel implements IAcceptor {
 
 		} else if (selKey == mDestKey) {
 
-			if (selKey.isValid() && selKey.isConnectable()) {
+			if (mConnCmd == CONN_CMD_TCP && selKey.isValid() && selKey.isConnectable()) {
 				Log.i(getTag(), "dest receive connect ops.");
 				try {
-					if(!mDest.finishConnect()) {
+					if(mTCPDest != null && !mTCPDest.finishConnect()) {
 						Log.e(getTag(), "finish connect failed.");
 						notifySocketClosed(Error.E_S5_BIND_PROXY_FAILED);
 						return null;
@@ -572,7 +647,12 @@ public class SSockChannel implements IAcceptor {
 
 			if (selKey.isValid() && selKey.isReadable()) {
 				Log.d(getTag(), "recv dest OP_READ");
-				int r = read(mDest, mDownStreamBufferIn);
+				int r = 0;
+				if(mConnCmd == CONN_CMD_TCP && mTCPDest != null) {
+					r = read(mTCPDest, mDownStreamBufferIn);
+				}else if(mConnCmd == CONN_CMD_UDP && mUDPDest != null){
+					r = read(mUDPDest, mDownStreamBufferIn);
+				}
 				if (r <= 0) {
 					if(++mRetryTimesWhileReadNull > MAX_RETRY_FOR_READ) {
 						Log.d(getTag(), "read from dest failed," + r + " pause dest read.");
@@ -591,7 +671,12 @@ public class SSockChannel implements IAcceptor {
 			if (selKey.isValid() && selKey.isWritable()) {// dest channel is writable now, lets check if anything need be relay
 				Log.d(getTag(), "recv dest OP_WRITE");
 				if (mUpStreamBufferOut != null && mUpStreamBufferOut.position() > 0) {
-					int w = write(mDest, mUpStreamBufferOut);
+					int w = 0;
+					if(mConnCmd == CONN_CMD_TCP && mTCPDest != null) {
+						w = write(mTCPDest, mUpStreamBufferOut);
+					}else if(mConnCmd == CONN_CMD_UDP && mUDPDest != null){
+						w = write(mUDPDest, mUpStreamBufferOut);
+					}
 					if (w > 0) {
 						if (mUpStreamBufferOut.remaining() > (BUFFER_SIZE >> 1) 
 								&& mSource != null && mSourceKey != null && !hasOps(mSourceKey, SelectionKey.OP_READ)) {

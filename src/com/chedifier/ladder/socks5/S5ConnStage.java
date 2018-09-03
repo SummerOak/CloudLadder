@@ -1,14 +1,16 @@
 package com.chedifier.ladder.socks5;
 
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.DatagramChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 
 import com.chedifier.ladder.base.ExceptionHandler;
 import com.chedifier.ladder.base.Log;
-import com.chedifier.ladder.base.NetUtils;
 import com.chedifier.ladder.base.StringUtils;
 import com.chedifier.ladder.cipher.Cipher;
 import com.chedifier.ladder.iface.Error;
@@ -45,10 +47,12 @@ public class S5ConnStage extends AbsS5Stage{
 				Log.i(getTag(),"recv conn info: " + StringUtils.toRawString(buffer.array(), buffer.position()));
 				int result = buildConnInfo(mConnInfo,buffer.array(), 0, buffer.position());
 				if(result > 0){
-					Log.d(getTag(), "recv conn info success. " + mConnInfo);
+					Log.r(getTag(), "recv conn info success. " + mConnInfo);
 					notifyConnInfo();
-					if((mConnInfo.connCmd&0xFF) != 0x01 && (mConnInfo.connCmd&0xFF) != 0x02) {
-						Log.e(getTag(), "this conn cmd is not support now: " + mConnInfo.connCmd);
+					if((mConnInfo.connCmd&0xFF) != ConnInfo.CONN_CMD_TCP_STREAM 
+							&& (mConnInfo.connCmd&0xFF) != ConnInfo.CONN_CMD_TCP_BIND 
+							&& (mConnInfo.connCmd&0xFF) != ConnInfo.CONN_CMD_UDP) {
+						Log.e(getTag(), "wrong connect command: " + mConnInfo.connCmd);
 						notifyError(Error.E_S5_SOCKET_ERROR_CONN);
 						return;
 					}
@@ -89,16 +93,30 @@ public class S5ConnStage extends AbsS5Stage{
 					int buildConnInfoResult = buildConnInfo(mConnInfo,outBuffer.array(), 0, outBuffer.position());
 					if(buildConnInfoResult > 0) {
 						notifyConnInfo();
-						Log.d(getTag(), "build conn info success. " + mConnInfo);
+						Log.r(getTag(), "build conn info success. " + mConnInfo);
 						InetSocketAddress remoteAddr = buildRemoteAddress(mConnInfo);
 						Log.d(getTag(), "build remote address: " + remoteAddr);
 						if(remoteAddr != null) {
+							
 							Log.d(getTag(), "bind to remote " + remoteAddr);
-							SocketChannel remoteChannel = NetUtils.bindSServer(remoteAddr);
-							Log.d(getTag(), "bind to remote return " + remoteChannel);
-							if(remoteChannel != null) {
+							boolean succ = false;
+							if(mConnInfo.connCmd == ConnInfo.CONN_CMD_TCP_STREAM || mConnInfo.connCmd == ConnInfo.CONN_CMD_TCP_BIND) {
+								SocketChannel tcpChannel = bindTCPServer(remoteAddr);
+								if(tcpChannel != null) {
+									getChannel().setDest(tcpChannel);
+									succ = true;
+								}
+							}else if(mConnInfo.connCmd == ConnInfo.CONN_CMD_UDP){
+								DatagramChannel udpChannel = bindUDPServer(remoteAddr);
+								if(udpChannel != null) {
+									getChannel().setDest(udpChannel);
+									succ = true;
+								}
+							}
+							
+							Log.d(getTag(), "bind to remote return " + succ);
+							if(succ) {
 								mConnInfo.netAddr = remoteAddr;
-								getChannel().setDest(remoteChannel);
 								ByteBuffer rep = ByteBufferPool.obtain(256);
 								byte addrType = mConnInfo.addrInfo.addrtp;
 								rep.put(new byte[]{0x05,0x00,0x00,addrType});
@@ -212,6 +230,36 @@ public class S5ConnStage extends AbsS5Stage{
 		notifyError(result);
 	}
 
+	private SocketChannel bindTCPServer(InetSocketAddress netAddr) {
+		
+		try {
+			SocketChannel server = SocketChannel.open();
+			server.configureBlocking(false);
+			server.connect(netAddr);
+			return server;
+		} catch (Throwable e) {
+			ExceptionHandler.handleException(e);
+		}
+
+		return null;
+	}
+	
+	private DatagramChannel bindUDPServer(InetSocketAddress netAddr) {
+		try {
+			DatagramChannel channel = DatagramChannel.open();
+			SocketAddress address = new InetSocketAddress(0);
+			DatagramSocket socket = channel.socket();
+		    socket.setSoTimeout(5000);
+		    socket.bind(address);
+		    channel.connect(netAddr);
+		    return channel;
+		} catch (Throwable e) {
+			ExceptionHandler.handleException(e);
+		}
+		
+		return null;
+	}
+	
 	private int buildConnInfo(ConnInfo connInfo,byte[] data,int offset,int len) {
 		int p = offset;
 		
@@ -227,7 +275,7 @@ public class S5ConnStage extends AbsS5Stage{
 			byte connCmd = data[1];
 			byte addrType = data[3];
 			switch(addrType) {
-				case 0x01:{
+				case ConnInfo.ADDR_IPV4:{
 					if((len-p) == 4 + 2) {
 						addrInfo = new AddrInfo();
 						addrInfo.addrtp = 0x01;
@@ -239,7 +287,7 @@ public class S5ConnStage extends AbsS5Stage{
 					}
 					return 0;
 				}
-				case 0x03:{
+				case ConnInfo.ADDR_DOMAIN:{
 					if((len-p) > 1) {
 						int domainL = data[p];
 						p += 1;
@@ -256,7 +304,7 @@ public class S5ConnStage extends AbsS5Stage{
 					
 					return 0;
 				}
-				case 0x04:{
+				case ConnInfo.ADDR_IPV6:{
 					if((len-p) == 6 + 2) {
 						addrInfo = new AddrInfo();
 						addrInfo.addrtp = 0x04;
@@ -300,7 +348,7 @@ public class S5ConnStage extends AbsS5Stage{
 			
 			AddrInfo addrInfo = mConnInfo.addrInfo;
 			if(addrInfo != null) {
-				if(addrInfo.addrtp == AddrInfo.ADDR_DOMAIN) {					
+				if(addrInfo.addrtp == ConnInfo.ADDR_DOMAIN) {					
 					domain = StringUtils.toString(addrInfo.addr);
 				}else {
 					ip = StringUtils.bytes2IP(addrInfo.addrtp==1?4:6, addrInfo.addr);
@@ -327,6 +375,14 @@ public class S5ConnStage extends AbsS5Stage{
 		private AddrInfo addrInfo;
 		private InetSocketAddress netAddr;
 		
+		public static final int ADDR_DOMAIN 	= 0x03;
+		public static final int ADDR_IPV4  	= 0x01;
+		public static final int ADDR_IPV6 	= 0x04;
+		
+		private static final byte CONN_CMD_TCP_STREAM = 0x01;
+		private static final byte CONN_CMD_TCP_BIND = 0x02;
+		private static final byte CONN_CMD_UDP	= 0x03;
+		
 		@Override
 		public String toString() {
 			return "conn: " + (connCmd&0xFF) + " addr " + addrInfo + " resolved: " + netAddr;
@@ -334,10 +390,6 @@ public class S5ConnStage extends AbsS5Stage{
 	}
 	
 	private final class AddrInfo{
-		
-		public static final int ADDR_DOMAIN 	= 0x03;
-		public static final int ADDR_IPV4  	= 0x01;
-		public static final int ADDR_IPV6 	= 0x04;
 		
 		private byte[] addr;
 		private byte addrtp;

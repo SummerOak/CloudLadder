@@ -1,9 +1,7 @@
 package com.chedifier.ladder.base;
 
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.nio.channels.SelectionKey;
-import java.nio.channels.SocketChannel;
 
 public class NetUtils {
 
@@ -13,19 +11,6 @@ public class NetUtils {
 		}
 		
 		return "?";
-	}
-	
-	public static SocketChannel bindSServer(InetSocketAddress netAddr) {
-		SocketChannel server = null;
-		try {
-			server = SocketChannel.open();
-			server.configureBlocking(false);
-			server.connect(netAddr);
-		} catch (Throwable e) {
-			ExceptionHandler.handleException(e);
-		}
-
-		return server;
 	}
 	
 	public static InetAddress resolveAddrByDomain(String domain) {
