@@ -23,7 +23,7 @@ public class ByteBufferPool {
 	
 	private static long sMemInUsing = 0L;
 	private static long sMemTotal = 0L;
-	private static final int[] CALIBRATION = new int[] {256,512,1024,1<<13,1<<18,1<<20,1<<21};
+	private static final int[] CALIBRATION = new int[] {64, 128, 1<<8, 1<<9,1<<10,1<<11,1<<12,1<<13,1<<14, 1<<15, 1<<16, 1<<19};
 	
 	private static List<IMemInfoListener> sMemListeners = new CopyOnWriteArrayList<>();
 	
@@ -77,7 +77,7 @@ public class ByteBufferPool {
 	public static synchronized ByteBuffer obtain(int size) {
 		final int fsize = align(size);
 		if(fsize <= 0) {
-			Log.e(TAG, "wrong size");
+			Log.e(TAG, "wrong size " + size);
 			return null;
 		}
 		
@@ -149,7 +149,9 @@ public class ByteBufferPool {
 	}
 	
 	private static void onBufferBack(ByteBuffer buffer) {
-		sInUsing.remove(getByteBufferId(buffer));
+		long id = getByteBufferId(buffer);
+		sInUsing.remove(id);
+		sMemInfo.remove(id);
 		notify(sMemInUsing,sMemTotal);
 	}
 	

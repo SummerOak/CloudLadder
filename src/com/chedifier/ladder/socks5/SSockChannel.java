@@ -245,7 +245,7 @@ public class SSockChannel implements IAcceptor {
 				
 				int estl = mCipher.encryptLen(len);
 				if(estl > dest.remaining()) {
-					Log.e(getTag(), "encryptRelay>>> out buffer may be full filled: need " + estl + " remain " + dest.remaining());
+					Log.d(getTag(), "encryptRelay>>> out buffer may be full filled: need " + estl + " remain " + dest.remaining());
 					notifyRelayFailed(Error.E_S5_OUT_BUFFER_FULL_FILLED);
 					break;
 				}
@@ -447,8 +447,8 @@ public class SSockChannel implements IAcceptor {
 	}
 
 	public synchronized void destroy() {
-		Log.r(getTag(), "total>>> src>" + mSrcIn + ",src<" + mSrcOut + ",dest>" + mDestIn + ",dest<" + mDestOut);
-		Log.r(getTag(), "mUpStreamBufferIn "+ mUpStreamBufferIn 
+		Log.d(getTag(), "total>>> src>" + mSrcIn + ",src<" + mSrcOut + ",dest>" + mDestIn + ",dest<" + mDestOut);
+		Log.d(getTag(), "mUpStreamBufferIn "+ mUpStreamBufferIn 
 				+ " mDownStreamBufferIn " + mDownStreamBufferIn 
 				+ " mUpStreamBufferOut " + mUpStreamBufferOut 
 				+ " mDownStreamBufferOut " + mDownStreamBufferOut);
@@ -635,7 +635,7 @@ public class SSockChannel implements IAcceptor {
 						updateOps(false, false, SelectionKey.OP_CONNECT);
 						updateOps(false, true, SelectionKey.OP_READ|SelectionKey.OP_WRITE);
 						mDestConnected = true;
-						Log.r(getTag(), "bind proxy success!");
+						Log.d(getTag(), "bind proxy success!");
 					}
 				} catch (Throwable e) {
 					ExceptionHandler.handleException(e);

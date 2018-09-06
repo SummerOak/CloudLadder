@@ -9,7 +9,7 @@ public class PaddingProguarder implements ICoder{
 	
 	
 	private TYPE mType = TYPE.HEAD;
-	private static final int MAX_PADDING = Cipher.MAX_PARCEL_SIZE>>2;
+	private static final int MAX_PADDING = 512;
 	
 	public PaddingProguarder() {
 		

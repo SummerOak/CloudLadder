@@ -27,7 +27,7 @@ public class S5ConnStage extends AbsS5Stage{
 	
 	@Override
 	public void start() {
-		Log.r(getTag(), "S5ConnStage start>>>");
+		Log.d(getTag(), "S5ConnStage start>>>");
 		super.start();
 		
 		notifyState(SProxyIface.STATE.CONN);
@@ -47,7 +47,7 @@ public class S5ConnStage extends AbsS5Stage{
 				Log.i(getTag(),"recv conn info: " + StringUtils.toRawString(buffer.array(), buffer.position()));
 				int result = buildConnInfo(mConnInfo,buffer.array(), 0, buffer.position());
 				if(result > 0){
-					Log.r(getTag(), "recv conn info success. " + mConnInfo);
+					Log.d(getTag(), "recv conn info success. " + mConnInfo);
 					notifyConnInfo();
 					if((mConnInfo.connCmd&0xFF) != ConnInfo.CONN_CMD_TCP_STREAM 
 							&& (mConnInfo.connCmd&0xFF) != ConnInfo.CONN_CMD_TCP_BIND 

@@ -4,6 +4,7 @@ import java.io.File;
 import java.util.ArrayList;
 
 import com.chedifier.ladder.base.JobScheduler.Job;
+import com.chedifier.ladder.base.ObjectPool.IConstructor;
 import com.chedifier.ladder.memory.ByteBufferPool;
 import com.chedifier.ladder.socks5.Configuration;
 import com.chedifier.ladder.socks5.SProxy;
@@ -22,6 +23,19 @@ public class Log {
 	private static final int LOG_TIME_ZONE = 3600*1000;//seperate logs by time,put logs have same time zone together.
 	private static ArrayList<String> sCache = new ArrayList<>(MAX_SIZE);
 	private static volatile long sLastDumpTime = 0L;
+	
+	private static ObjectPool<LogDumper> sDumperPool = new ObjectPool<>(new IConstructor<LogDumper>() {
+
+		@Override
+		public LogDumper newInstance(Object... params) {
+			return new LogDumper((String)params[0]);
+		}
+
+		@Override
+		public void initialize(LogDumper e, Object... params) {
+			e.cb = null;
+		}
+	}, 20);
 	
 	public static final void setLogDir(String dir) {
 		sLogDir = dir;
@@ -115,33 +129,43 @@ public class Log {
 	}
 	
 	public static final void dumpLog2File(final ICallback cb) {
+		LogDumper dumper = sDumperPool.obtain("log-dumper");
+		dumper.cb = cb;
+		JobScheduler.schedule(dumper);
 		
-		JobScheduler.schedule(new Job("log-dumper") {
-			
-			@Override
-			public void run() {
-				StringBuilder sb = null;
-				synchronized (sCache) {
-					if(!sCache.isEmpty()) {
-						sb = new StringBuilder(1024);
-						for(String s:sCache) {
-							sb.append(s).append("\n\r");
-						}
-						
-						sCache.clear();
+	}
+	
+	private static class LogDumper extends Job{
+		public LogDumper(String tag) {
+			super(tag);
+		}
+		
+		ICallback cb;
+		@Override
+		public void run() {
+			StringBuilder sb = null;
+			synchronized (sCache) {
+				if(!sCache.isEmpty()) {
+					sb = new StringBuilder(1024);
+					for(String s:sCache) {
+						sb.append(s).append("\n\r");
 					}
-				}
-				
-				if(sb != null && sb.length() > 0) {
-					String path = getLogFilePath();
-					FileUtils.writeString2File(path, sb.toString());
-				}
-				
-				if(cb != null) {
-					cb.onDumpFinish();
+					
+					sCache.clear();
 				}
 			}
-		});
+			
+			if(sb != null && sb.length() > 0) {
+				String path = getLogFilePath();
+				FileUtils.writeString2File(path, sb.toString(), true);
+			}
+			
+			sDumperPool.recycle(this);
+			
+			if(cb != null) {
+				cb.onDumpFinish();
+			}
+		}
 		
 	}
 	

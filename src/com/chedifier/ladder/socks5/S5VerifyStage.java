@@ -24,7 +24,7 @@ public class S5VerifyStage extends AbsS5Stage{
 	
 	@Override
 	public void start() {
-		Log.r(getTag(), "S5VerifyStage start >>>");
+		Log.d(getTag(), "S5VerifyStage start >>>");
 		super.start();
 		
 		getChannel().updateOps(true, true, SelectionKey.OP_READ);
@@ -101,7 +101,6 @@ public class S5VerifyStage extends AbsS5Stage{
 					}else if(verifyResult < 0){
 						Log.e(getTag(), "verify socks5 methos failed.");
 						notifyError(Error.E_S5_VERIFY_FAILED);
-						return;
 					}
 				}
 				

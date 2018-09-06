@@ -32,20 +32,14 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 
 	private static int sConnectionId;
 	
-	private final int mPort;
 	private Selector mSelector;
 	private ServerSocketChannel mSocketChannel = null;
-	private boolean mIsLocal;
+	private static RuntimeInfo mRuntimeInfo = new RuntimeInfo();
 	
 	private boolean mWorking = false;
-	private String mProxyHost = null;
-	private int mProxyPort;
 	private InetSocketAddress mProxyAddress;
 	
 	private ObjectPool<Relayer> mRelayerPool;
-	private static volatile long sMaxConcurrents = 0L;
-	private static volatile long sAliveConnections = 0L;
-	private static volatile long sMaxConnections = 0L;
 	private Set<Relayer> mLivingRelayers = new HashSet<Relayer>();
 	private IProxyListener mListener;
 	
@@ -72,16 +66,16 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 
 	private SProxy(int port,boolean isLocal,String serverHost,int serverPort,IProxyListener l) {
 		TAG = "SProxy." + (isLocal?"local":"server");
-		mPort = port;
-		mIsLocal = isLocal;
+		mRuntimeInfo.port = port;
+		mRuntimeInfo.isLocal = isLocal;
 		mListener = l;
 		
 		init();
 		
 		
 		if(isLocal) {
-			mProxyHost = serverHost;
-			mProxyPort = serverPort;
+			mRuntimeInfo.proxyHost = serverHost;
+			mRuntimeInfo.proxyPort = serverPort;
 			mProxyAddress = new InetSocketAddress(serverHost,serverPort);
 		}
 		
@@ -114,7 +108,7 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 			mSelector = Selector.open();
 			mSocketChannel = ServerSocketChannel.open();
 			mSocketChannel.configureBlocking(false);
-			InetSocketAddress addr = new InetSocketAddress(mPort);
+			InetSocketAddress addr = new InetSocketAddress(mRuntimeInfo.port);
 			mSocketChannel.bind(addr);
 			SelectionKey selKey = mSocketChannel.register(mSelector, SelectionKey.OP_ACCEPT);
 			selKey.attach(AcceptorWrapper.wrapper(this));
@@ -127,10 +121,10 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 		}
 		
 		mWorking = true;
-		Messenger.notifyMessage(mListener, IProxyListener.PROXY_START, mIsLocal,mPort, mProxyHost,mProxyPort);
+		Messenger.notifyMessage(mListener, IProxyListener.PROXY_START, mRuntimeInfo.isLocal,mRuntimeInfo.port, mRuntimeInfo.proxyHost,mRuntimeInfo.proxyPort);
 		
 		long lastcheck = System.currentTimeMillis();
-		Log.r(TAG, "start success >>> listening " + mPort);
+		Log.r(TAG, "start success >>> listening " + mRuntimeInfo.port);
 		while(mWorking) {
 			long now = System.currentTimeMillis();
 			long cost = now;
@@ -191,7 +185,7 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 			
 			@Override
 			public void onDumpFinish() {
-				Messenger.notifyMessage(mListener, IProxyListener.PROXY_STOP, mIsLocal);
+				Messenger.notifyMessage(mListener, IProxyListener.PROXY_STOP, mRuntimeInfo.isLocal);
 			}
 		});
 	}
@@ -231,28 +225,24 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 	
 	private void incConnection(Relayer r) {
 		synchronized (mLivingRelayers) {
-			++sMaxConnections;
-			++sAliveConnections;
-			if(sAliveConnections > sMaxConcurrents) {
-				sMaxConcurrents = sAliveConnections;
-			}
+			mRuntimeInfo.onConnect(r.mClientAddr);
 			
 			mLivingRelayers.add(r);
 		}
 		
 //		Log.r(TAG, "inc " + sAliveConnections);
-		Messenger.notifyMessage(mListener, IProxyListener.ALIVE_NUM, sAliveConnections);
+		Messenger.notifyMessage(mListener, IProxyListener.ALIVE_NUM, mRuntimeInfo.aliveConnections);
 	}
 	
 	private void decConnection(Relayer r) {
 		
 		synchronized (mLivingRelayers) {
-			--sAliveConnections;
+			mRuntimeInfo.onConnDisconnect(r.mClientAddr);
 			mLivingRelayers.remove(r);
 		}
 		
 //		Log.r(TAG, "dec " + sAliveConnections);
-		Messenger.notifyMessage(mListener, IProxyListener.ALIVE_NUM, sAliveConnections);
+		Messenger.notifyMessage(mListener, IProxyListener.ALIVE_NUM, mRuntimeInfo.aliveConnections);
 	}
 	
 	@Override
@@ -273,7 +263,7 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 	
 	@Override
 	public void onPeriodicCheck(long timeout) {
-		
+		mRuntimeInfo.dump();
 	}
 
 	private class Relayer implements ICallback,ITrafficEvent{
@@ -281,6 +271,7 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 		private SSockChannel mChannel;
 		private int mConnId;
 		private boolean mAlive;
+		private String mClientAddr;
 		
 		private Relayer(SocketChannel conn) {
 			init(conn);
@@ -292,10 +283,10 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 		
 		private void init(SocketChannel conn) {
 			mConnId = generateConnectionId();
-			String clientAddr = (conn.socket() != null && conn.socket().getInetAddress() != null)?conn.socket().getInetAddress().getHostAddress():"unknown";
-			Log.d(getTag(), "receive an conntion " + clientAddr);
+			mClientAddr = (conn.socket() != null && conn.socket().getInetAddress() != null)?conn.socket().getInetAddress().getHostAddress():"unknown";
+			Log.d(getTag(), "receive an conntion " + mClientAddr);
 			
-			Messenger.notifyMessage(mListener, IProxyListener.RECV_CONN,mConnId, clientAddr);
+			Messenger.notifyMessage(mListener, IProxyListener.RECV_CONN,mConnId, mClientAddr);
 			
 			incConnection(this);
 			
@@ -304,11 +295,11 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 			mChannel.setSource(conn);
 			mChannel.setTrafficListener(this);
 			
-			AbsS5Stage stage = new S5VerifyStage(mChannel, mIsLocal, this);
+			AbsS5Stage stage = new S5VerifyStage(mChannel, mRuntimeInfo.isLocal, this);
 			stage.setConnId(mConnId);
 			stage.start();
 			
-			if(mIsLocal) {
+			if(mRuntimeInfo.isLocal) {
 				try {
 					SocketChannel sc = SocketChannel.open();
 					mChannel.setDest(sc);
@@ -398,9 +389,10 @@ public class SProxy implements IAcceptor,IMemInfoListener{
 	
 	public static final String dumpInfo() {
 		StringBuilder sb = new StringBuilder(256);
-		sb.append("living connections: " + sAliveConnections)
-		.append(" , max concurrents: " + sMaxConcurrents)
-		.append(" , total connections: " + sMaxConnections).append("\n");
+		sb.append("living connections: " + mRuntimeInfo.aliveConnections)
+		.append(" , max concurrents: " + mRuntimeInfo.maxConcurrents)
+		.append(" , total connections: " + mRuntimeInfo.maxConnections).append("\n\r");
+		sb.append("runtimeInfo: \n\r").append(mRuntimeInfo.toString());
 		sb.append("using memory ").append(ByteBufferPool.getMemInUsing())
 		.append(" , Total memory ").append(ByteBufferPool.getMemTotal());
 		return sb.toString();
